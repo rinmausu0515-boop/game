@@ -36,6 +36,10 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 #bb{position:absolute;right:12px;bottom:98px;width:76px;height:76px;border-radius:50%;padding:0;font-size:15px;background:#ffd23f;box-shadow:0 5px 0 #a98a00;display:none}
 #ov td{padding:2px 10px}
 @media (pointer:coarse){#sq,#bb{display:block}}
+button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.up{display:flex;gap:12px;align-items:center;justify-content:space-between;background:#2a2548;padding:10px 12px;border-radius:12px}
+.up div small{display:block;font:700 11px "Hiragino Sans","Yu Gothic",sans-serif;opacity:.8;margin-top:5px}
+.seg{display:flex;gap:3px;margin-top:6px}.seg i{width:20px;height:8px;background:#3a3466;border-radius:2px}.seg i.on{background:var(--b)}
 .hidden{display:none!important}
 </style>
 </head>
@@ -57,7 +61,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
-const T=20,W=60,H=40,VW=800,VH=560,WW=W*T,WH=H*T,TIME=90;
+const T=20,W=60,H=40,VW=800,VH=560,WW=W*T,WH=H*T;let TIME=90;
 const cv=$('c'),cx=cv.getContext('2d'),mmc=$('mm').getContext('2d'),ov=$('ov');
 const mk2=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
 const layer=mk2(WW,WH),lx=layer.getContext('2d'),wallC=mk2(WW,WH),wx=wallC.getContext('2d');
@@ -72,10 +76,41 @@ const WP={
 const WK=Object.keys(WP);
 const L=[[10,5,4,4],[10,31,4,4],[19,2,2,7],[19,31,2,7],[16,17,3,6],[6,9,2,3],[6,28,2,3],[24,8,3,2],[24,30,3,2]];
 const walls=[...L,...L.map(([x,y,w,h])=>[W-x-w,y,w,h]),[27,12,6,2],[27,26,6,2],[28,17,4,6]];
-let grid,bullets,beams,parts,bombs=[],bombReq=false,ents,player,time,phase='title',keys={},mouse={x:600,y:280,down:false,active:false},joy=null,aimTouch=null,squidBtn=false,scoreT=0,last=0,sel='shooter',mode=2,camx=0,camy=0,shake=0,shx=0,shy=0,cnt=0,ac,muted=false;
+let grid,bullets,beams,parts,bombs=[],bombReq=false,ents,player,time,phase='title',keys={},mouse={x:600,y:280,down:false,active:false},joy=null,aimTouch=null,squidBtn=false,scoreT=0,last=0,sel='shooter',mode=5,camx=0,camy=0,shake=0,shx=0,shy=0,cnt=0,banner=0,ac,mg,muted=false;
 
 function beep(f,d=.08,t='square',v=.05){if(!ac||muted)return;try{const o=ac.createOscillator(),g=ac.createGain();o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
 
+let save={coins:0,up:{rng:0,ink:0,def:0}},tab='battle';
+try{const s=JSON.parse(localStorage.getItem('inkbattle-save'));if(s&&s.up)save={coins:s.coins|0,up:{rng:Math.min(10,s.up.rng|0),ink:Math.min(10,s.up.ink|0),def:Math.min(10,s.up.def|0)}}}catch(e){}
+const persist=()=>{try{localStorage.setItem('inkbattle-save',JSON.stringify(save))}catch(e){}};
+const rM=e=>e===player?1+save.up.rng*.06:1;
+const UPS=[['rng','射程','弾・ビーム・ボムが届く距離がのびる',6],['ink','インク容量','インクの最大量がふえる',8],['def','防御力','受けるダメージがへる',4]];
+const tabsHTML=()=>`<div class="row">${[['battle','バトル'],['armory','武器庫']].map(([k,n])=>`<button class="opt${tab===k?' sel':''}" data-tab="${k}" style="min-width:110px;font-size:17px">${n}</button>`).join('')}</div><div style="color:#ffd23f;font-size:18px">🪙 ${save.coins}</div>`;
+const armoryHTML=()=>`<h1>武器庫</h1>${tabsHTML()}<div style="display:flex;flex-direction:column;gap:10px;width:min(440px,100%)">${UPS.map(([k,n,d,p])=>{const lv=save.up[k],max=lv>=10,can=!max&&save.coins>=100,sg=k==='def'?'-':'+';return `<div class="up"><div style="text-align:left"><b>${n}</b> <span style="opacity:.7">Lv ${lv}/10</span><div class="seg">${Array.from({length:10},(_,i)=>`<i class="${i<lv?'on':''}"></i>`).join('')}</div><small>${d}（${sg}${lv*p}%${max?'':' → '+sg+(lv+1)*p+'%'}）</small></div><button class="opt" data-u="${k}"${can?'':' disabled'}>${max?'MAX':'強化<small>🪙 100</small>'}</button></div>`}).join('')}</div><p>強化は、バトルで使う自分のキャラにだけ効きます。<br>コインは試合のあとにもらえます（勝利 20 / 敗北・ひきわけ 10 + 撃破数 ×2）</p>`;
+const fmt=s=>s>=60?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):s;
+const BR=[45,41,36,43],CH=[[57,60,64],[53,57,60],[48,52,55],[55,59,62]],LP=[0,1,2,1,0,2,1,2],mf=n=>440*2**((n-69)/12);
+let mus=0,mstep=0,mnext=0,nbuf;
+function mnote(f,t,d,ty,v){const o=ac.createOscillator(),g=ac.createGain();o.type=ty;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(mg);o.start(t);o.stop(t+d+.02)}
+function mdrum(t,k){
+  const g=ac.createGain();g.connect(mg);
+  if(k){const o=ac.createOscillator();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(40,t+.12);g.gain.setValueAtTime(.09,t);g.gain.exponentialRampToValueAtTime(.001,t+.15);o.connect(g);o.start(t);o.stop(t+.16)}
+  else{const s=ac.createBufferSource();s.buffer=nbuf;g.gain.setValueAtTime(.025,t);g.gain.exponentialRampToValueAtTime(.001,t+.04);s.connect(g);s.start(t);s.stop(t+.05)}
+}
+function msched(){
+  while(mnext<ac.currentTime+.2){
+    const s=mstep%64,bar=s>>4,i=s&15,c=CH[bar],t=mnext;
+    if(i%4===0)mdrum(t,1);
+    if(i%2===1)mdrum(t,0);
+    if(i%2===0){mnote(mf(BR[bar]+(i%8===6?12:0)),t,.16,'sawtooth',.045);mnote(mf(c[LP[i>>1]]+12+(bar===3&&i>=8?12:0)),t,.14,'square',.02)}
+    mnext+=(phase==='play'&&time<15)?.085:.1;mstep++;
+  }
+}
+function startMusic(){
+  if(mus)return;
+  if(!nbuf){nbuf=ac.createBuffer(1,2205,44100);const d=nbuf.getChannelData(0);for(let k=0;k<d.length;k++)d[k]=Math.random()*2-1}
+  mstep=0;mnext=ac.currentTime+.1;mus=setInterval(msched,40);
+}
+function stopMusic(){clearInterval(mus);mus=0}
 function paint(x,y,r,team){
   const gx=x/T,gy=y/T;
   for(let j=Math.max(0,Math.floor(gy-r));j<=Math.min(H-1,Math.ceil(gy+r));j++)
@@ -88,11 +123,13 @@ function paint(x,y,r,team){
 }
 const cell=(x,y)=>{const i=Math.floor(x/T),j=Math.floor(y/T);return(i<0||j<0||i>=W||j>=H)?3:grid[j*W+i]};
 const solid=(x,y)=>cell(x,y)===3;
-function ray(x,y,a){for(let d=0;d<520;d+=6)if(solid(x+Math.cos(a)*d,y+Math.sin(a)*d))return d;return 520}
+const hid=e=>false;
+const sd=(ax,ay,bx,by,px,py)=>{const dx=bx-ax,dy=by-ay,l=dx*dx+dy*dy||1,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l));return Math.hypot(ax+dx*t-px,ay+dy*t-py)};
+function ray(x,y,a,m=520){for(let d=0;d<m;d+=6)if(solid(x+Math.cos(a)*d,y+Math.sin(a)*d))return d;return m}
 
 function mkE(team,i,n,isBot,w){
   const x=(team===1?3.5:W-3.5)*T,y=(H/2+(i-(n-1)/2)*2.4)*T;
-  return{team,x,y,sx:x,sy:y,r:9,kills:0,deaths:0,bcd:0,hp:100,ink:100,squid:false,dead:0,cd:0,ch:0,w,ang:team===1?0:Math.PI,isBot,tx:x,ty:y,think:0,refill:false,mx:0,my:0,held:false};
+  return{team,x,y,sx:x,sy:y,r:9,kills:0,deaths:0,bcd:0,rg:0,fl:0,inv:0,hp:100,mi:100,ink:100,squid:false,dead:0,cd:0,ch:0,w,ang:team===1?0:Math.PI,isBot,tx:x,ty:y,think:0,refill:false,mx:0,my:0,held:false};
 }
 function reset(){
   grid=new Uint8Array(W*H);bullets=[];beams=[];parts=[];bombs=[];
@@ -106,9 +143,9 @@ function reset(){
   for(let t=1;t<=2;t++)for(let i=0;i<mode;i++){
     const me=t===1&&i===0;
     const e=mkE(t,i,mode,!me,me?sel:WK[Math.floor(Math.random()*WK.length)]);
-    if(me)player=e;ents.push(e);
+    if(me){player=e;e.mi=Math.round(100*(1+save.up.ink*.08));e.ink=e.mi}ents.push(e);
   }
-  time=TIME;scoreT=0;shake=0;parts=[];
+  time=TIME;$('time').textContent=fmt(TIME);scoreT=0;shake=0;parts=[];
   camx=Math.max(0,Math.min(WW-VW,player.x-VW/2));camy=Math.max(0,Math.min(WH-VH,player.y-VH/2));
   score();
 }
@@ -118,34 +155,34 @@ function move(e,dx,dy){
   const t=Math.sign(dy),ny=e.y+dy;
   if(!solid(e.x,ny+t*r)&&!solid(e.x-r*.8,ny+t*r)&&!solid(e.x+r*.8,ny+t*r))e.y=ny;
 }
-function hurt(e,dmg,team,src){e.hp-=dmg;if(e===player)shake=Math.max(shake,5);if(e.hp<=0)kill(e,team,src);else if(e===player)beep(200,.08,'sawtooth',.04)}
-function kill(e,by,src){if(src)src.kills++;e.deaths++;
+function hurt(e,dmg,team,src){if(e.inv>0)return;e.hp-=dmg*(e===player?1-save.up.def*.04:1);e.rg=2.2;e.fl=.1;if(src===player)beep(e.hp<=0?1200:900,.05,'square',.03);if(e===player)shake=Math.max(shake,5);if(e.hp<=0)kill(e,team,src);else if(e===player)beep(200,.08,'sawtooth',.04)}
+function kill(e,by,src){if(src)src.kills++;if(src===player)banner=1.6;e.deaths++;
   e.dead=2.5;e.hp=100;e.ch=0;paint(e.x,e.y,2.6,by);
   for(let k=0;k<16;k++){const a=Math.random()*6.28,s=60+Math.random()*170;parts.push({x:e.x,y:e.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.5,c:COL[e.team]})}
   beep(e===player?110:260,.2,'triangle',.05);if(e===player)shake=10;
 }
 function explode(b,R=52,P=2.8,K=1.4,B=100){
   paint(b.x,b.y,P,b.team);shake=Math.max(shake,3);beep(90,.2,'sawtooth',.05);
-  ents.forEach(o=>{if(o.team!==b.team&&!o.dead&&!o.squid){const d=Math.hypot(o.x-b.x,o.y-b.y);if(d<R)hurt(o,Math.round(B-d*K),b.team,b.src)}});
+  ents.forEach(o=>{if(o.team!==b.team&&!o.dead&&!hid(o)){const d=Math.hypot(o.x-b.x,o.y-b.y);if(d<R)hurt(o,Math.round(B-d*K),b.team,b.src)}});
   for(let k=0;k<10;k++){const a=Math.random()*6.28,s=50+Math.random()*130;parts.push({x:b.x,y:b.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.4,c:COL[b.team]})}
 }
 function beam(e){
-  const c=e.ch,L2=ray(e.x,e.y,e.ang),co=Math.cos(e.ang),si=Math.sin(e.ang);
+  const c=e.ch,L2=ray(e.x,e.y,e.ang,520*rM(e)),co=Math.cos(e.ang),si=Math.sin(e.ang);
   for(let d=14;d<L2;d+=14)paint(e.x+co*d,e.y+si*d,.7+.5*c,e.team);
   paint(e.x+co*L2,e.y+si*L2,1.2+c,e.team);
-  ents.forEach(o=>{if(o.team===e.team||o.dead||o.squid)return;const dx=o.x-e.x,dy=o.y-e.y,t=dx*co+dy*si,p=Math.abs(-dx*si+dy*co);if(t>0&&t<L2&&p<o.r+4)hurt(o,35+95*c,e.team,e)});
+  ents.forEach(o=>{if(o.team===e.team||o.dead||hid(o))return;const dx=o.x-e.x,dy=o.y-e.y,t=dx*co+dy*si,p=Math.abs(-dx*si+dy*co);if(t>0&&t<L2&&p<o.r+4)hurt(o,35+95*c,e.team,e)});
   beams.push({x:e.x,y:e.y,a:e.ang,L:L2,t:.15,c:COL[e.team]});
   if(e===player){beep(700,.12,'sawtooth',.05);shake=Math.max(shake,2)}
 }
 function roll(e){
   if(e.cd>0||e.ink<1)return;e.cd=.05;e.ink-=.6;
-  const x=e.x+Math.cos(e.ang)*17,y=e.y+Math.sin(e.ang)*17;if(solid(x,y))return;
+  const rr=17*rM(e),x=e.x+Math.cos(e.ang)*rr,y=e.y+Math.sin(e.ang)*rr;if(solid(x,y))return;
   paint(x,y,1.4,e.team);
-  ents.forEach(o=>{if(o.team!==e.team&&!o.dead&&!o.squid&&Math.hypot(o.x-x,o.y-y)<o.r+14)hurt(o,60,e.team,e)});
+  ents.forEach(o=>{if(o.team!==e.team&&!o.dead&&!hid(o)&&Math.hypot(o.x-x,o.y-y)<o.r+14)hurt(o,60,e.team,e)});
 }
 function throwBomb(e,d){
   if(e.bcd>0||e.ink<50||e.squid)return;
-  e.bcd=4;e.ink-=50;d=Math.max(50,Math.min(220,d));d=Math.max(20,Math.min(d,ray(e.x,e.y,e.ang)-10));
+  e.bcd=4;e.ink-=50;d=Math.max(50,Math.min(220*rM(e),d));d=Math.max(20,Math.min(d,ray(e.x,e.y,e.ang)-10));
   bombs.push({sx:e.x,sy:e.y,x:e.x,y:e.y,ex:e.x+Math.cos(e.ang)*d,ey:e.y+Math.sin(e.ang)*d,t:0,team:e.team,src:e});
   beep(300,.1,'triangle',.04);
 }
@@ -162,7 +199,7 @@ function trigger(e,held,dt){
   if(e.cd>0||e.ink<w.cost)return;
   e.cd=w.cd;e.ink-=w.cost;
   const a=e.ang+(Math.random()-.5)*w.sp,s=w.spd*(.94+Math.random()*.12);
-  bullets.push({x:e.x+Math.cos(e.ang)*10,y:e.y+Math.sin(e.ang)*10,vx:Math.cos(a)*s,vy:Math.sin(a)*s,team:e.team,src:e,life:w.life,t:0,tr:w.tr,pr:w.pr,dmg:w.dmg,boom:w.boom});
+  bullets.push({x:e.x+Math.cos(e.ang)*10,y:e.y+Math.sin(e.ang)*10,vx:Math.cos(a)*s,vy:Math.sin(a)*s,team:e.team,src:e,life:w.life*rM(e),t:0,tr:w.tr,pr:w.pr,dmg:w.dmg,boom:w.boom});
   if(e===player)beep(k==='blaster'?110:480+Math.random()*60,.04,'square',.025);
 }
 function control(e,dt){
@@ -174,13 +211,14 @@ function control(e,dt){
     e.squid=!!(keys.ShiftLeft||keys.ShiftRight||keys.Space||squidBtn);
     if(aimTouch){e.ang=Math.atan2(aimTouch.y+camy-e.y,aimTouch.x+camx-e.x);held=true}
     else if(mouse.active){e.ang=Math.atan2(mouse.y+camy-e.y,mouse.x+camx-e.x);held=mouse.down}
+    if(keys.Enter||keys.NumpadEnter)held=true;
     const l=Math.hypot(mx,my);if(l>1){mx/=l;my/=l}
   }else{botAI(e,dt);mx=e.mx;my=e.my;held=e.held}
   trigger(e,held,dt);
   if(!e.isBot&&bombReq){bombReq=false;let d=160;if(mouse.active&&!aimTouch&&!joy)d=Math.hypot(mouse.x+camx-e.x,mouse.y+camy-e.y);throwBomb(e,d)}
   const u=cell(e.x,e.y);let sp=WP[e.w].mv;
-  if(e.squid){sp=u===e.team?230:60;if(u===e.team)e.ink=Math.min(100,e.ink+45*dt)}
-  else{if(u&&u!==3&&u!==e.team)sp*=.52;e.ink=Math.min(100,e.ink+4*dt);if(e.ch>0)sp*=e.w==='charger'?.5:.65}
+  if(e.squid){sp=u===e.team?230:60;if(u===e.team)e.ink=Math.min(e.mi,e.ink+45*dt)}
+  else{if(u&&u!==3&&u!==e.team)sp*=.52;e.ink=Math.min(e.mi,e.ink+4*dt);if(e.ch>0)sp*=e.w==='charger'?.5:.65}
   if(mx||my){move(e,mx*sp*dt,my*sp*dt);if(!e.isBot&&!aimTouch&&!mouse.active)e.ang=Math.atan2(my,mx)}
 }
 function botAI(e,dt){
@@ -200,7 +238,7 @@ function botAI(e,dt){
   const dx=e.tx-e.x,dy=e.ty-e.y,d=Math.hypot(dx,dy)||1;
   e.mx=d>12?dx/d:0;e.my=d>12?dy/d:0;e.squid=e.refill;e.held=false;
   if(e.refill)return;
-  if(foe&&fd<w.rng+(e.w==='roller'?120:0)&&!foe.squid){
+  if(foe&&fd<w.rng+(e.w==='roller'?120:0)&&!hid(foe)){
     e.ang=Math.atan2(foe.y-e.y,foe.x-e.x);
     if(e.w==='roller'){e.mx=Math.cos(e.ang);e.my=Math.sin(e.ang)}
     e.held=e.w==='charger'?e.ch<.95:true;
@@ -208,17 +246,17 @@ function botAI(e,dt){
   }else{e.ang=Math.atan2(dy,dx);e.held=e.w!=='charger'&&d>20}
 }
 function update(dt){
-  time-=dt;if(time<=0){end();return}
+  banner-=dt;time-=dt;if(time<=0){end();return}
   ents.forEach(e=>{
-    if(e.dead>0){e.dead-=dt;if(e.dead<=0){e.x=e.sx;e.y=e.sy;e.ink=100;e.squid=false}return}
-    e.cd-=dt;e.bcd-=dt;control(e,dt);if(e.hp<100)e.hp=Math.min(100,e.hp+10*dt);
+    if(e.dead>0){e.dead-=dt;if(e.dead<=0){e.dead=0;e.x=e.sx;e.y=e.sy;e.ink=e.mi;e.squid=false;e.inv=1.5}return}
+    e.cd-=dt;e.bcd-=dt;e.fl-=dt;e.inv-=dt;e.rg-=dt;control(e,dt);if(e.hp<100&&e.rg<=0)e.hp=Math.min(100,e.hp+14*dt);
   });
   for(let i=bullets.length-1;i>=0;i--){
-    const b=bullets[i];b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;b.t-=dt;
+    const b=bullets[i],px=b.x,py=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;b.t-=dt;
     if(b.t<=0){paint(b.x,b.y,b.tr,b.team);b.t=.05}
     let hit=null;
-    for(const e of ents)if(e.team!==b.team&&!e.dead&&!e.squid&&Math.hypot(e.x-b.x,e.y-b.y)<e.r+3){hit=e;break}
-    if(hit||b.life<=0||solid(b.x,b.y)){
+    for(const e of ents)if(e.team!==b.team&&!e.dead&&!hid(e)&&sd(px,py,b.x,b.y,e.x,e.y)<e.r+4){hit=e;break}
+    if(hit||b.life<=0||solid(b.x,b.y)||solid((b.x+px)/2,(b.y+py)/2)){
       if(b.boom)explode(b);else{paint(b.x-b.vx*dt,b.y-b.vy*dt,hit?.8:b.pr,b.team);if(hit)hurt(hit,b.dmg,b.team,b.src)}
       bullets.splice(i,1);
     }
@@ -227,9 +265,9 @@ function update(dt){
   for(let i=beams.length-1;i>=0;i--){beams[i].t-=dt;if(beams[i].t<=0)beams.splice(i,1)}
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=dt;if(p.l<=0)parts.splice(i,1)}
   scoreT-=dt;if(scoreT<=0){scoreT=.3;score()}
-  $('time').textContent=Math.ceil(time);
-  $('inkbar').style.width=player.ink+'%';
-  $('inkbar').style.background=player.ink<20?'#ffd23f':'#ff2f93';
+  $('time').textContent=fmt(Math.ceil(time));
+  $('inkbar').style.width=player.ink/player.mi*100+'%';
+  $('inkbar').style.background=player.ink<player.mi*.2?'#ffd23f':'#ff2f93';
 }
 function score(){
   let a=0,b=0;
@@ -252,20 +290,21 @@ function draw(){
   cx.drawImage(layer,0,0);
   ents.forEach(e=>{
     if(e.dead>0)return;
-    const own=cell(e.x,e.y)===e.team;
+    const own=cell(e.x,e.y)===e.team;cx.globalAlpha=e.inv>0?.5:1;
     if(e.squid){cx.globalAlpha=own?.35:1;cx.fillStyle=COL[e.team];cx.beginPath();cx.ellipse(e.x,e.y,9,6,e.ang,0,7);cx.fill();cx.globalAlpha=1}
     else{
-      if(e.w==='charger'&&e.ch>0){const l=ray(e.x,e.y,e.ang);cx.strokeStyle=COL[e.team];cx.globalAlpha=.2+.6*e.ch;cx.lineWidth=1+3*e.ch;cx.beginPath();cx.moveTo(e.x,e.y);cx.lineTo(e.x+Math.cos(e.ang)*l,e.y+Math.sin(e.ang)*l);cx.stroke();cx.globalAlpha=1}
+      if(e.w==='charger'&&e.ch>0){const l=ray(e.x,e.y,e.ang,520*rM(e));cx.strokeStyle=COL[e.team];cx.globalAlpha=.2+.6*e.ch;cx.lineWidth=1+3*e.ch;cx.beginPath();cx.moveTo(e.x,e.y);cx.lineTo(e.x+Math.cos(e.ang)*l,e.y+Math.sin(e.ang)*l);cx.stroke();cx.globalAlpha=1}
       cx.fillStyle='#0004';cx.beginPath();cx.ellipse(e.x,e.y+7,9,4,0,0,7);cx.fill();
       cx.save();cx.translate(e.x,e.y);cx.rotate(e.ang);cx.fillStyle=DARK[e.team];
       if(e.w==='roller')cx.fillRect(9,-11,8,22);else if(e.w==='charger')cx.fillRect(4,-2,24,4);else if(e.w==='blaster')cx.fillRect(4,-5,12,10);else cx.fillRect(4,-3,e.w==='spinner'?16:13,e.w==='spinner'?7:6);
       cx.restore();
-      cx.fillStyle=COL[e.team];cx.beginPath();cx.arc(e.x,e.y,e.r,0,7);cx.fill();
+      cx.fillStyle=e.fl>0?'#fff':COL[e.team];cx.beginPath();cx.arc(e.x,e.y,e.r,0,7);cx.fill();
       cx.fillStyle='#fff';cx.beginPath();cx.arc(e.x+Math.cos(e.ang-.5)*4,e.y+Math.sin(e.ang-.5)*4,2.6,0,7);cx.arc(e.x+Math.cos(e.ang+.5)*4,e.y+Math.sin(e.ang+.5)*4,2.6,0,7);cx.fill();
     }
     if(e===player){cx.strokeStyle='#fff';cx.lineWidth=2;cx.beginPath();cx.arc(e.x,e.y,e.r+4,0,7);cx.stroke()}
     if(e.hp<100){cx.fillStyle='#0008';cx.fillRect(e.x-12,e.y-17,24,4);cx.fillStyle='#fff';cx.fillRect(e.x-12,e.y-17,24*e.hp/100,4)}
     if(e.ch>0&&(e.w==='charger'||e.w==='spinner')){cx.fillStyle='#000a';cx.fillRect(e.x-15,e.y+14,30,6);cx.fillStyle=e.ch>=1?'#ffd23f':COL[e.team];cx.fillRect(e.x-14,e.y+15,28*e.ch,4)}
+    cx.globalAlpha=1;
   });
   beams.forEach(b=>{cx.globalAlpha=b.t/.15;cx.strokeStyle='#fff';cx.lineWidth=7;cx.beginPath();cx.moveTo(b.x,b.y);cx.lineTo(b.x+Math.cos(b.a)*b.L,b.y+Math.sin(b.a)*b.L);cx.stroke();cx.strokeStyle=b.c;cx.lineWidth=4;cx.stroke();cx.globalAlpha=1});
   bombs.forEach(b=>{const p=Math.min(1,b.t/.5),h=p<1?Math.sin(Math.PI*p)*26:0;
@@ -278,6 +317,7 @@ function draw(){
   cx.strokeStyle='#fff3';cx.lineWidth=4;cx.strokeRect(0,0,WW,WH);
   cx.restore();
   if(phase==='play'||phase==='count'){
+    if(banner>0){const k=Math.min(1,(1.6-banner)*8+.4);cx.save();cx.globalAlpha=Math.min(1,banner*2);cx.translate(VW/2,452);cx.scale(.7+.3*k,.7+.3*k);cx.font='40px "Dela Gothic One",sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.lineWidth=8;cx.strokeStyle='#16112e';cx.strokeText('敵を倒した！',0,0);cx.fillStyle='#ffd23f';cx.fillText('敵を倒した！',0,0);cx.restore()}
     if(player.ch>0&&(player.w==='charger'||player.w==='spinner')){cx.fillStyle='#000a';cx.fillRect(298,514,204,18);cx.fillStyle=player.ch>=1?'#ffd23f':COL[1];cx.fillRect(300,516,200*player.ch,14);cx.font='700 11px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#16112e';cx.fillText(player.ch>=1?'MAX':'CHARGE',400,523)}
     const rdy=player.bcd<=0&&player.ink>=50;
     cx.fillStyle='#000a';cx.fillRect(10,534,96,16);cx.fillStyle=rdy?'#ffd23f':'#8884';cx.fillRect(12,536,92*(1-Math.max(0,player.bcd)/4),12);
@@ -301,25 +341,31 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 function menu(){
-  phase='title';reset();$('mm').classList.add('hidden');$('sq').classList.add('hidden');$('bb').classList.add('hidden');ov.classList.remove('hidden');
-  ov.innerHTML=`<h1>インクバトル</h1>
+  phase='title';stopMusic();reset();$('mm').classList.add('hidden');$('sq').classList.add('hidden');$('bb').classList.add('hidden');ov.classList.remove('hidden');tab='battle';renderMenu();}
+function renderMenu(){
+  if(tab==='armory'){ov.innerHTML=armoryHTML();return}
+  ov.innerHTML=`<h1>インクバトル</h1>${tabsHTML()}
 <div class="lb">ブキをえらぶ</div>
 <div class="row">${WK.map(k=>`<button class="opt${k===sel?' sel':''}" data-w="${k}">${WP[k].n}<small>${WP[k].d}</small></button>`).join('')}</div>
-<div class="lb">人数をえらぶ(1チームの人数)</div>
-<div class="row">${[1,2,3,4].map(n=>`<button class="opt${n===mode?' sel':''}" data-m="${n}">${n} vs ${n}</button>`).join('')}</div>
-<p>移動: WASD / 矢印　撃つ: マウス長押し　イカ: Shift / Space　ボム: E / 右クリック　音: M<br>スマホ: 左側で移動、右側で狙って撃つ、右下ボタンでイカ / ボム</p>
+<div class="lb">5 vs 5 のチーム戦</div>
+
+<div class="lb">時間をえらぶ</div>
+<div class="row">${[[60,'1分'],[90,'90秒'],[180,'3分']].map(([s,n])=>`<button class="opt${s===TIME?' sel':''}" data-t="${s}">${n}</button>`).join('')}</div>
+<p>移動: WASD / 矢印　撃つ: マウス長押し / Enter　イカ: Shift / Space　ボム: E / 右クリック　音: M<br>スマホ: 左側で移動、右側で狙って撃つ、右下ボタンでイカ / ボム</p>
 <button id="go">バトル開始</button>
 <p><a href="./" style="color:#1fe0a8">← メニューに戻る</a></p>`;
 }
 function start(){
-  ac=ac||new(window.AudioContext||window.webkitAudioContext)();
+  if(!ac){ac=new(window.AudioContext||window.webkitAudioContext)();mg=ac.createGain();mg.gain.value=muted?0:1;mg.connect(ac.destination)}
+  startMusic();
   reset();phase='count';cnt=3.99;ov.classList.add('hidden');$('mm').classList.remove('hidden');
   if(matchMedia('(pointer:coarse)').matches){$('sq').classList.remove('hidden');$('bb').classList.remove('hidden')}
 }
 function end(){
-  phase='over';const[a,b]=score(),tot=a+b||1;
-  const win=a>b,sb=[...ents].sort((x,y)=>y.kills-x.kills).map(e=>`<tr style="${e===player?'color:#fff;font-weight:900':''}"><td style="color:${COL[e.team]}">${e===player?'あなた':e.team===1?'味方':'敵'}</td><td>${WP[e.w].n}</td><td>${e.kills}</td><td>${e.deaths}</td></tr>`).join('');
-  ov.innerHTML=`<h1>${a===b?'ひきわけ':win?'勝ち!':'負け…'}</h1><p style="font-size:20px"><span style="color:#ff2f93">ピンク ${(a/tot*100).toFixed(1)}%</span>　<span style="color:#1fe0a8">グリーン ${(b/tot*100).toFixed(1)}%</span></p><p style="font-size:18px">あなたが倒した敵: <b style="color:#ffd23f;font-size:30px">${player.kills}</b> 人</p><table style="border-collapse:collapse;font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-weight:700;font-size:13px"><tr style="opacity:.6"><td>プレイヤー</td><td>ブキ</td><td>撃破</td><td>被撃破</td></tr>${sb}</table><div class="row"><button id="go">もう一度</button><button id="menu" style="background:#3a3466;color:#f4f0ff;box-shadow:0 6px 0 #0007">メニューへ</button></div>`;
+  phase='over';stopMusic();const[a,b]=score(),tot=a+b||1;
+  const win=a>b,gain=(win?20:10)+player.kills*2,sb=[...ents].sort((x,y)=>y.kills-x.kills).map(e=>`<tr style="${e===player?'color:#fff;font-weight:900':''}"><td style="color:${COL[e.team]}">${e===player?'あなた':e.team===1?'味方':'敵'}</td><td>${WP[e.w].n}</td><td>${e.kills}</td><td>${e.deaths}</td></tr>`).join('');
+  save.coins+=gain;persist();
+  ov.innerHTML=`<h1>${a===b?'ひきわけ':win?'勝ち!':'負け…'}</h1><p style="font-size:20px"><span style="color:#ff2f93">ピンク ${(a/tot*100).toFixed(1)}%</span>　<span style="color:#1fe0a8">グリーン ${(b/tot*100).toFixed(1)}%</span></p><p style="font-size:18px">あなたが倒した敵: <b style="color:#ffd23f;font-size:30px">${player.kills}</b> 人</p><p style="font-size:16px;color:#ffd23f">🪙 +${gain}（${win?'勝利 20 + ':a===b?'ひきわけ 10 + ':'敗北 10 + '}撃破 ${player.kills}×2）　所持 ${save.coins}</p><table style="border-collapse:collapse;font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-weight:700;font-size:13px"><tr style="opacity:.6"><td>プレイヤー</td><td>ブキ</td><td>撃破</td><td>被撃破</td></tr>${sb}</table><div class="row"><button id="go">もう一度</button><button id="menu" style="background:#3a3466;color:#f4f0ff;box-shadow:0 6px 0 #0007">メニューへ</button></div>`;
   ov.classList.remove('hidden');$('sq').classList.add('hidden');$('bb').classList.add('hidden');
   beep(win?880:200,.5,'triangle',.06);
 }
@@ -327,11 +373,13 @@ ov.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.id==='go')return start();
   if(b.id==='menu')return menu();
-  if(b.dataset.w)sel=b.dataset.w;if(b.dataset.m)mode=+b.dataset.m;
-  ov.querySelectorAll('.opt').forEach(o=>o.classList.toggle('sel',o.dataset.w?o.dataset.w===sel:+o.dataset.m===mode));
+  if(b.dataset.tab){tab=b.dataset.tab;return renderMenu()}
+  if(b.dataset.u){const k=b.dataset.u;if(save.up[k]<10&&save.coins>=100){save.coins-=100;save.up[k]++;persist();beep(880,.12,'triangle',.05)}return renderMenu()}
+  if(b.dataset.w)sel=b.dataset.w;if(b.dataset.m)mode=+b.dataset.m;if(b.dataset.t){TIME=+b.dataset.t;time=TIME;$('time').textContent=fmt(TIME)}
+  ov.querySelectorAll('.opt').forEach(o=>o.classList.toggle('sel',o.dataset.w?o.dataset.w===sel:o.dataset.t?+o.dataset.t===TIME:+o.dataset.m===mode));
 });
 const pos=ev=>{const r=cv.getBoundingClientRect();return{x:(ev.clientX-r.left)*VW/r.width,y:(ev.clientY-r.top)*VH/r.height}};
-addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyM')muted=!muted;if((e.code==='KeyE'||e.code==='KeyF')&&!e.repeat)bombReq=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyM'){muted=!muted;if(mg)mg.gain.value=muted?0:1}if((e.code==='KeyE'||e.code==='KeyF')&&!e.repeat)bombReq=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)||(e.code.endsWith('Enter')&&(phase==='play'||phase==='count')))e.preventDefault()});
 addEventListener('keyup',e=>keys[e.code]=false);
 addEventListener('blur',()=>keys={});
 cv.addEventListener('contextmenu',e=>e.preventDefault());
